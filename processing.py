@@ -84,7 +84,8 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
             try:
                 stream.run(overwrite_output=True, capture_stderr=True)
                 print(f"Successfully created clip: {clip_path}")
-                clip_files.append(clip_path)
+                # Store just the filename instead of the full path
+                clip_files.append(os.path.basename(clip_path))
             except ffmpeg.Error as e:
                 stderr = e.stderr.decode() if e.stderr else "No error output"
                 print(f"\nFFmpeg error details:")

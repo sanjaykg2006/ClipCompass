@@ -61,7 +61,9 @@ def uploaded_file(filename):
 
 @app.route("/clips/<path:filename>")
 def serve_clip(filename):
-    return send_from_directory(CLIPS_FOLDER, filename)
+    # Ensure we only use the basename of the filename for security
+    safe_filename = os.path.basename(filename)
+    return send_from_directory(CLIPS_FOLDER, safe_filename)
 
 
 if __name__ == "__main__":
