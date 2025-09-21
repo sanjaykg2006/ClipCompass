@@ -52,13 +52,13 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
         # Handle text wrapping and file creation
         temp_text_file = os.path.join(output_folder, f"temp_text_{uuid.uuid4()}.txt")
         
-        # Simple text wrapping at 40 characters
+        # Broader text wrapping at 60 characters
         words = text.split()
         lines = []
         current_line = []
         
         for word in words:
-            if sum(len(w) for w in current_line) + len(current_line) + len(word) <= 40:
+            if sum(len(w) for w in current_line) + len(current_line) + len(word) <= 60:
                 current_line.append(word)
             else:
                 lines.append(' '.join(current_line))
@@ -67,7 +67,7 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
         if current_line:
             lines.append(' '.join(current_line))
         
-        processed_text = '\n'.join(lines)  # Simple newline
+        processed_text = '\n'.join(lines)
         
         # Write the text to a temporary file
         with open(temp_text_file, 'w', encoding='utf-8') as f:
@@ -92,8 +92,30 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
         # Change working directory to where the text file is
         os.chdir(text_dir)
         
-        # Create a minimal filter string with relative path
-        vf_filter = (
+        # Add fade effects with timing
+        fade_duration = 0.5  # Duration of fade in/out in seconds
+        clip_duration = end - start
+        
+        print("\nFade Effect Parameters:")
+        print(f"Fade duration: {fade_duration} seconds")
+        print(f"Clip duration: {clip_duration} seconds")
+        print(f"Fade in period: 0 to {fade_duration} seconds")
+        print(f"Full opacity period: {fade_duration} to {clip_duration - fade_duration} seconds")
+        print(f"Fade out period: {clip_duration - fade_duration} to {clip_duration} seconds")
+
+        # Calculate fade timings in frames (assuming 24fps)
+        fps = 24
+        fade_frames = int(fade_duration * fps)
+        end_fade_start = int((clip_duration - fade_duration) * fps)
+        
+        # Create separate filters for text and fading
+        print("\nFilter Construction:")
+        print(f"FPS: {fps}")
+        print(f"Fade frames: {fade_frames}")
+        print(f"End fade starts at frame: {end_fade_start}")
+        
+        # Build the filter string in parts for better debugging
+        draw_text = (
             f'drawtext=fontfile=/Windows/Fonts/arial.ttf:'
             f'fontsize=28:'
             f'fontcolor=white:'
@@ -103,6 +125,22 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
             f'boxcolor=black@0.25:'
             f'textfile={text_filename}'
         )
+        
+        fade_filter = (
+            f'fade=t=in:st=0:d={fade_duration},'
+            f'fade=t=out:st={clip_duration-fade_duration}:d={fade_duration}'
+        )
+        
+        # Combine the filters
+        vf_filter = f"{draw_text},{fade_filter}"
+        
+        print("\nFilter Components:")
+        print("1. Draw Text Filter:")
+        print(draw_text)
+        print("\n2. Fade Filter:")
+        print(fade_filter)
+        print("\nFinal Combined Filter:")
+        print(vf_filter)
         
         print(f"Final filter string: {vf_filter}")
         print(f"Working directory: {os.getcwd()}")
@@ -127,22 +165,49 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
                 movflags="faststart"
             )
 
-            # Debug information
+            # Debug information and validation
             cmd = ffmpeg.compile(stream)
             cmd_str = " ".join(cmd)
-            print("\nFFmpeg Command Details:")
+            
+            print("\nPre-execution Validation:")
             print("=" * 80)
-            print(f"Working directory: {os.getcwd()}")
-            print(f"Input video path: {video_path}")
-            print(f"Output clip path: {clip_path}")
-            print(f"Clip duration: {end-start:.2f} seconds")
-            print(f"Text file: {text_filename}")
-            print(f"Text content:\n{text}")
-            print("\nFilter chain:")
+            
+            print("1. File System Check:")
+            print(f"- Working directory: {os.getcwd()}")
+            print(f"- Working directory exists: {os.path.exists(os.getcwd())}")
+            print(f"- Input video exists: {os.path.exists(video_path)}")
+            print(f"- Input video size: {os.path.getsize(video_path) / (1024*1024):.2f} MB")
+            print(f"- Text file exists: {os.path.exists(text_filename)}")
+            print(f"- Output directory exists: {os.path.exists(os.path.dirname(clip_path))}")
+            
+            print("\n2. Text File Validation:")
+            try:
+                with open(text_filename, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"- Content length: {len(content)} characters")
+                    print(f"- Number of lines: {len(content.splitlines())}")
+                    print(f"- Content:\n{content}")
+            except Exception as e:
+                print(f"Error reading text file: {e}")
+            
+            print("\n3. Timing Parameters:")
+            print(f"- Clip start time: {start:.2f}s")
+            print(f"- Clip end time: {end:.2f}s")
+            print(f"- Clip duration: {end-start:.2f}s")
+            print(f"- Fade duration: {fade_duration:.2f}s")
+            
+            print("\n4. Filter Chain Components:")
+            print("Draw Text Filter:")
+            print(draw_text)
+            print("\nFade Filter:")
+            print(fade_filter)
+            print("\nCombined Filter:")
+            print(vf_filter)
+            
+            print("\n5. Full FFmpeg Command:")
             print("-" * 40)
-            print(f"VF filter: {vf_filter}")
+            print(cmd_str)
             print("-" * 40)
-            print(f"Full FFmpeg command:\n{cmd_str}")
             print("=" * 80)
 
             try:
