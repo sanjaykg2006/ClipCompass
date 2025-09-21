@@ -1,52 +1,58 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory
-import os, subprocess
+import os
+import subprocess
+from flask import Flask, request, render_template, send_from_directory
+from werkzeug.utils import secure_filename
+from processing import transcribe
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 
 @app.route("/")
-def home():
+def index():
     return render_template("index.html")
+
 
 @app.route("/upload", methods=["POST"])
 def upload_video():
-    if "file" not in request.files:
+    # Match the HTML input name
+    if "videoFile" not in request.files:
         return "No file uploaded", 400
 
-    file = request.files["file"]
-    video_filename = "input.mp4"
-    audio_filename = "audio.wav"
+    file = request.files["videoFile"]
+    if file.filename == "":
+        return "No file selected", 400
 
-    video_path = os.path.join(UPLOAD_FOLDER, video_filename)
-    audio_path = os.path.join(UPLOAD_FOLDER, audio_filename)
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
 
-    # Save uploaded video
-    file.save(video_path)
+    # Extract audio in 16kHz mono for Whisper
+    audio_path = os.path.join(UPLOAD_FOLDER, "audio.wav")
+    subprocess.run([
+        "ffmpeg", "-y", "-i", filepath, "-ar", "16000", "-ac", "1", audio_path
+    ])
 
-    # Extract audio using FFmpeg
-    subprocess.run(["ffmpeg", "-y", "-i", video_path, audio_path])
+    # Transcribe with timestamps
+    full_text, raw_segments = transcribe(audio_path)
+    print("DEBUG segments:", raw_segments)
 
-    # Return HTML page with video and audio players
-    return f"""
-    <h3>Video Uploaded Successfully!</h3>
-    <p>Video:</p>
-    <video width="480" controls>
-        <source src="/uploads/{video_filename}" type="video/mp4">
-    </video>
-    <p>Extracted Audio:</p>
-    <audio controls>
-        <source src="/uploads/{audio_filename}" type="audio/wav">
-    </audio>
-    <br><br>
-    <a href="/">Upload another video</a>
-    """
+    return render_template(
+        "index.html",
+        video_file=filename,
+        audio_file="audio.wav",
+        transcript=full_text,
+        segments=raw_segments
+    )
 
-# Serve uploaded files
-@app.route("/uploads/<filename>")
-def serve_file(filename):
+
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
+
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True)
