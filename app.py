@@ -2,13 +2,14 @@ import os
 import subprocess
 from flask import Flask, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
-from processing import transcribe
+from processing import transcribe, generate_highlight_clips
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+CLIPS_FOLDER = os.path.join(os.getcwd(), "clips")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(CLIPS_FOLDER, exist_ok=True)
 
 
 @app.route("/")
@@ -40,18 +41,27 @@ def upload_video():
     full_text, raw_segments = transcribe(audio_path)
     print("DEBUG segments:", raw_segments)
 
+    # Generate highlight clips (first 3 segments longer than 5s)
+    clips = generate_highlight_clips(filepath, CLIPS_FOLDER, raw_segments, max_clips=3)
+
     return render_template(
         "index.html",
         video_file=filename,
         audio_file="audio.wav",
         transcript=full_text,
-        segments=raw_segments
+        segments=raw_segments,
+        clips=clips  # list of clip filenames
     )
 
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+@app.route("/clips/<path:filename>")
+def serve_clip(filename):
+    return send_from_directory(CLIPS_FOLDER, filename)
 
 
 if __name__ == "__main__":

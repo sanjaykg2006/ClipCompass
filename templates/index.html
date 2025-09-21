@@ -36,7 +36,6 @@
     <h3>Video Preview:</h3>
     <video id="videoPreview" controls></video>
 
-    <!-- Processing Results -->
     {% if video_file %}
     <h2>Processing Results</h2>
 
@@ -67,15 +66,27 @@
         <tbody>
         {% for seg in segments %}
             <tr>
-                <td>
-                    <a href="#" class="seek-link" data-start="{{ seg.start | float }}">{{ seg.start }}</a>
-                </td>
+                <td><a href="#" class="seek-link" data-start="{{ seg.start | float }}">{{ seg.start }}</a></td>
                 <td>{{ seg.end }}</td>
                 <td>{{ seg.text }}</td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
+
+    <h3>Highlight Clips:</h3>
+    {% if clips %}
+        {% for clip in clips %}
+            <video controls width="400">
+                <source src="{{ url_for('serve_clip', filename=clip) }}" type="video/mp4">
+            </video>
+            <a href="{{ url_for('serve_clip', filename=clip) }}" download>Download Clip</a>
+            <br><br>
+        {% endfor %}
+    {% else %}
+        <p>No highlight clips generated.</p>
+    {% endif %}
+
     {% endif %}
 
     <script>
