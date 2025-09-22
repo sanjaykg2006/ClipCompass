@@ -82,7 +82,7 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
             f"box=1:boxcolor=black@0.25:text='{safe_text}'"
         )
         fade_filter = f"fade=t=in:st=0:d={fade_duration},fade=t=out:st={clip_duration-fade_duration}:d={fade_duration}"
-        vf_filter = f"{draw_text},{fade_filter}"
+        vf_filter = f"{draw_text},{fade_filter},scale=1280:720,fps=30"
 
         try:
             stream = ffmpeg.input(video_path, ss=start, t=clip_duration)
@@ -90,15 +90,10 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
                 stream,
                 clip_path,
                 vf=vf_filter,
-                acodec="aac",
-                vcodec="libx264",
-                video_bitrate="2M",
-                preset="ultrafast",
+                acodec="aac", ar="44100", ac="2",
+                vcodec="libx264", preset="ultrafast", crf=23,
                 movflags="faststart"
             )
-
-            cmd = ffmpeg.compile(stream)
-            print("FFmpeg command:", " ".join(cmd))
             stream.run(overwrite_output=True, capture_stderr=True)
             print(f"Created clip: {clip_path}")
             clip_files.append(os.path.basename(clip_path))
@@ -112,148 +107,63 @@ def generate_highlight_clips(video_path, output_folder, segments, max_clips=3):
 
 def combine_clips_into_reel(clip_files, clips_folder, output_file="highlight_reel.mp4"):
     """
-    Combine multiple highlight clips into a single video highlight reel with fade transitions.
+    Combine multiple highlight clips into a single video highlight reel with
+    intro, outro, and consistent encoding (prevents frame drops).
     """
     if not clip_files:
         print("No clips to combine.")
         return None
 
-    print("\nStarting clip combination process...")
-    print(f"Number of clips to combine: {len(clip_files)}")
-    
-    # Full paths of clips
-    clip_paths = [os.path.join(clips_folder, f) for f in clip_files]
-    
-    # Validate all clips exist and are readable
-    print("\nValidating input clips:")
-    for clip_path in clip_paths:
-        if not os.path.exists(clip_path):
-            print(f"ERROR: Clip not found: {clip_path}")
-            return None
-        try:
-            size = os.path.getsize(clip_path)
-            if size == 0:
-                print(f"ERROR: Clip is empty: {clip_path}")
-                return None
-            print(f"✓ Validated {os.path.basename(clip_path)}: {size/1024/1024:.2f} MB")
-        except OSError as e:
-            print(f"ERROR: Cannot access clip {clip_path}: {str(e)}")
-            return None
-
-    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".txt") as tf:
-        for clip_path in clip_paths:
-            tf.write(f"file '{clip_path.replace('\\', '/')}'\n")
-        concat_list_file = tf.name
-
     output_path = os.path.join(clips_folder, output_file)
 
-    try:
-        print("\nCombining clips into highlight reel:")
-        print("=" * 80)
-        
-        # Print input clips information and verify order
-        print("\n1. Input Clips:")
-        for i, clip_path in enumerate(clip_paths):
-            clip_size = os.path.getsize(clip_path) / (1024*1024)  # Convert to MB
-            print(f"Clip {i+1}: {os.path.basename(clip_path)} ({clip_size:.2f} MB)")
-            
-        # Verify correct clip order based on file names
-        clip_paths = sorted(clip_paths, key=lambda x: x.lower())  # Sort clips by name
-        print("\nClips after sorting:")
-        for i, clip_path in enumerate(clip_paths):
-            print(f"Clip {i+1}: {os.path.basename(clip_path)}")
-        
-        # Build the filter complex chain
-        filter_complex = []
-        inputs = []
-        
-        print("\n2. Building Filter Complex Chain:")
-        print(f"Building chain for {len(clip_paths)} clips...")
-        
-        # First add the input references
-        for i, clip_path in enumerate(clip_paths):
-            inputs.extend(["-i", clip_path])
-            print(f"\nAdding clip {i+1}: {os.path.basename(clip_path)}")
-            # Split audio and video streams for each clip
-            filter_complex.append(f"[{i}:v]setpts=PTS-STARTPTS[v{i}]")
-            filter_complex.append(f"[{i}:a]asetpts=PTS-STARTPTS[a{i}]")
-        
-        # Build concatenation chain in the correct order
-        video_inputs = ''.join(f'[v{i}]' for i in range(len(clip_paths)))
-        audio_inputs = ''.join(f'[a{i}]' for i in range(len(clip_paths)))
-        
-        # Add concat filter for both video and audio
-        filter_complex.append(
-            f"{video_inputs}concat=n={len(clip_paths)}:v=1:a=0[vout];"
-            f"{audio_inputs}concat=n={len(clip_paths)}:v=0:a=1[aout]"
-        )
-        
-        print(f"Created concatenation chain for {len(clip_paths)} clips")
-        
-        # Join all filters with semicolon
-        filter_str = ";".join(filter_complex)
-        
-        if not filter_complex:
-            print("WARNING: No transitions were created in filter chain")
-        
-        print("\n3. Final Filter Chain:")
-        print(filter_str)
-        
-        # Build final command
-        cmd = ["ffmpeg", "-y"] + inputs
-        
-        # Use consistent output mapping for concatenated streams
-        video_map = "[vout]"
-        audio_map = "[aout]"
-        
-        cmd.extend([
-            "-filter_complex", filter_str,
-            "-map", video_map,
-            "-map", audio_map,  # Map the concatenated audio
-            "-c:v", "libx264",
-            "-c:a", "aac",  # Explicitly set audio codec
-            "-crf", "23",
-            "-preset", "veryfast",
-            output_path
-        ])
-        
-        print("\n4. FFmpeg Command:")
-        print("Command components:")
-        print("  Input files:", inputs)
-        print("  Filter complex:", filter_str)
-        print("  Video output mapping:", video_map)
-        print("  Audio output mapping:", audio_map)
-        print("\nFull command:")
-        print(" ".join(cmd))
-        print("\n5. Executing command...")
-        
-        try:
-            # Run FFmpeg with both stdout and stderr captured
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            
-        except subprocess.CalledProcessError as e:
-            print("\nFFmpeg Error:")
-            print("Return code:", e.returncode)
-            print("\nError output:")
-            print(e.stderr if e.stderr else "No error output available")
-            print("\nStandard output:")
-            print(e.stdout if e.stdout else "No standard output available")
-            raise
-        
-        print("\nFFmpeg Output:")
-        print(result.stdout)
-        if result.stderr:
-            print("\nFFmpeg Errors/Warnings:")
-            print(result.stderr)
-        
-        print(f"\nHighlight reel created: {output_path}")
-        print("=" * 80)
-        return output_file
-    finally:
-        if os.path.exists(concat_list_file):
-            os.remove(concat_list_file)
+    # --- Create intro & outro cards with silent audio ---
+    intro_path = os.path.join(clips_folder, "intro.mp4")
+    outro_path = os.path.join(clips_folder, "outro.mp4")
+
+    intro_cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=3:r=30",
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-vf", "drawtext=text='ClipCompass Highlights':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:a", "aac", "-ar", "44100", "-ac", "2",
+        "-shortest", intro_path
+    ]
+    subprocess.run(intro_cmd, check=True)
+
+    outro_cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=3:r=30",
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-vf", "drawtext=text='Thanks for Watching!':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:a", "aac", "-ar", "44100", "-ac", "2",
+        "-shortest", outro_path
+    ]
+    subprocess.run(outro_cmd, check=True)
+
+    # --- Build ffmpeg concat filter ---
+    inputs = []
+    filter_complex_parts = []
+    all_files = [intro_path] + [os.path.join(clips_folder, f) for f in clip_files] + [outro_path]
+
+    for i, file in enumerate(all_files):
+        inputs.extend(["-i", file])
+        filter_complex_parts.append(f"[{i}:v:0][{i}:a:0]")
+
+    filter_complex = "".join(filter_complex_parts) + f"concat=n={len(all_files)}:v=1:a=1[outv][outa]"
+
+    concat_cmd = [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", "[outv]", "-map", "[outa]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "faststart",
+        output_path
+    ]
+    subprocess.run(concat_cmd, check=True)
+
+    print(f"\n✅ Smooth Highlight reel created: {output_path}")
+    return output_file

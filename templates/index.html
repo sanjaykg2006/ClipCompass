@@ -4,12 +4,15 @@
     <title>ClipCompass</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color: #333; }
         video, audio { display: block; margin-bottom: 20px; max-width: 100%; }
         table { border-collapse: collapse; width: 100%; margin-top: 20px; }
         th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
         th { background: #f2f2f2; }
         td a { color: blue; cursor: pointer; text-decoration: underline; }
         input, select, button { margin-bottom: 20px; padding: 6px; }
+        .clip-container { margin-bottom: 30px; padding: 10px; border: 1px solid #ccc; background: #fff; }
+        .highlight-reel { border: 2px solid #4CAF50; padding: 15px; background: #eafbea; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -23,7 +26,7 @@
         <label for="modelSelect">Select Whisper Model:</label>
         <select name="model" id="modelSelect">
             <option value="tiny">Tiny</option>
-            <option value="base">Base</option>
+            <option value="base" selected>Base</option>
             <option value="small">Small</option>
             <option value="medium">Medium</option>
             <option value="large">Large</option>
@@ -79,7 +82,7 @@
         <form id="clipOrderForm" method="POST" action="{{ url_for('combine_clips') }}">
             <div id="clipList">
                 {% for clip in clips %}
-                <div class="clip-container" style="margin-bottom: 30px; padding: 10px; border: 1px solid #ccc;">
+                <div class="clip-container">
                     <div style="display: flex; align-items: center; margin-bottom: 10px;">
                         <input type="number" 
                                name="clipOrder_{{ clip }}" 
@@ -97,7 +100,7 @@
                 {% endfor %}
             </div>
             <button type="submit" style="margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
-                Combine Clips in Selected Order
+                Combine Clips in Selected Order (with Intro & Outro)
             </button>
         </form>
     {% else %}
@@ -106,10 +109,13 @@
 
     <h3>Combined Highlight Reel:</h3>
     {% if highlight_reel %}
+    <div class="highlight-reel">
         <video controls width="600">
             <source src="{{ url_for('serve_clip', filename=highlight_reel) }}" type="video/mp4">
         </video>
+        <br>
         <a href="{{ url_for('serve_clip', filename=highlight_reel) }}" download>Download Highlight Reel</a>
+    </div>
     {% else %}
         <p>No combined highlight reel generated.</p>
     {% endif %}

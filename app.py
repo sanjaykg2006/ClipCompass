@@ -1,6 +1,6 @@
 import os
 import subprocess
-from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from flask import Flask, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 from processing import transcribe, generate_highlight_clips, combine_clips_into_reel
 
@@ -65,30 +65,29 @@ def serve_clip(filename):
 
 @app.route("/combine", methods=["POST"])
 def combine_clips():
-    # Get all clip filenames from the form
     clip_orders = {}
-    
-    # Extract clip orders from form data
+
+    # Extract clip orders from form
     for key, value in request.form.items():
-        if key.startswith('clipOrder_'):
-            clip_name = key[len('clipOrder_'):]
+        if key.startswith("clipOrder_"):
+            clip_name = key[len("clipOrder_"):]
             order = int(value)
             clip_orders[clip_name] = order
-    
-    # Sort clips by their specified order
+
+    # Sort by user-specified order
     ordered_clips = sorted(clip_orders.keys(), key=lambda x: clip_orders[x])
     print("Clips will be combined in this order:", ordered_clips)
-    
-    # Combine clips in the specified order
+
+    # Create highlight reel with intro & outro
     highlight_reel = combine_clips_into_reel(ordered_clips, CLIPS_FOLDER)
-    
-    # Get original video file for context
+
+    # Find original uploaded video (for context display)
     video_file = None
     for filename in os.listdir(UPLOAD_FOLDER):
-        if filename.endswith(('.mp4', '.mov', '.avi')):
+        if filename.endswith((".mp4", ".mov", ".avi", ".mkv")):
             video_file = filename
             break
-            
+
     return render_template(
         "index.html",
         video_file=video_file,
