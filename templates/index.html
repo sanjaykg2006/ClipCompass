@@ -74,17 +74,44 @@
         </tbody>
     </table>
 
-    <h3>Highlight Clips:</h3>
+    <h3>Highlight Clips Order:</h3>
     {% if clips %}
-        {% for clip in clips %}
-            <video controls width="400">
-                <source src="{{ url_for('serve_clip', filename=clip) }}" type="video/mp4">
-            </video>
-            <a href="{{ url_for('serve_clip', filename=clip) }}" download>Download Clip</a>
-            <br><br>
-        {% endfor %}
+        <form id="clipOrderForm" method="POST" action="{{ url_for('combine_clips') }}">
+            <div id="clipList">
+                {% for clip in clips %}
+                <div class="clip-container" style="margin-bottom: 30px; padding: 10px; border: 1px solid #ccc;">
+                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <input type="number" 
+                               name="clipOrder_{{ clip }}" 
+                               value="{{ loop.index }}" 
+                               min="1" 
+                               max="{{ clips|length }}"
+                               style="width: 60px; margin-right: 10px;">
+                        <span>{{ clip }}</span>
+                    </div>
+                    <video controls width="400">
+                        <source src="{{ url_for('serve_clip', filename=clip) }}" type="video/mp4">
+                    </video>
+                    <a href="{{ url_for('serve_clip', filename=clip) }}" download>Download Clip</a>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="submit" style="margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+                Combine Clips in Selected Order
+            </button>
+        </form>
     {% else %}
         <p>No highlight clips generated.</p>
+    {% endif %}
+
+    <h3>Combined Highlight Reel:</h3>
+    {% if highlight_reel %}
+        <video controls width="600">
+            <source src="{{ url_for('serve_clip', filename=highlight_reel) }}" type="video/mp4">
+        </video>
+        <a href="{{ url_for('serve_clip', filename=highlight_reel) }}" download>Download Highlight Reel</a>
+    {% else %}
+        <p>No combined highlight reel generated.</p>
     {% endif %}
 
     {% endif %}

@@ -1,12 +1,11 @@
 import os
 import subprocess
-from flask import Flask, request, render_template, send_from_directory
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
-from processing import transcribe, generate_highlight_clips
+from processing import transcribe, generate_highlight_clips, combine_clips_into_reel
 
 app = Flask(__name__)
 
-# Directories
 UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")
 CLIPS_FOLDER = os.path.join(os.getcwd(), "clips")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -39,11 +38,9 @@ def upload_video():
 
     # Transcribe audio with timestamps
     full_text, raw_segments = transcribe(audio_path)
-    print("DEBUG segments:", raw_segments)
 
-    # Generate highlight clips (keyword-based)
+    # Generate highlight clips
     clips = generate_highlight_clips(filepath, CLIPS_FOLDER, raw_segments, max_clips=3)
-    print("Generated clips:", clips)
 
     return render_template(
         "index.html",
@@ -64,6 +61,41 @@ def uploaded_file(filename):
 def serve_clip(filename):
     safe_filename = os.path.basename(filename)
     return send_from_directory(CLIPS_FOLDER, safe_filename)
+
+
+@app.route("/combine", methods=["POST"])
+def combine_clips():
+    # Get all clip filenames from the form
+    clip_orders = {}
+    
+    # Extract clip orders from form data
+    for key, value in request.form.items():
+        if key.startswith('clipOrder_'):
+            clip_name = key[len('clipOrder_'):]
+            order = int(value)
+            clip_orders[clip_name] = order
+    
+    # Sort clips by their specified order
+    ordered_clips = sorted(clip_orders.keys(), key=lambda x: clip_orders[x])
+    print("Clips will be combined in this order:", ordered_clips)
+    
+    # Combine clips in the specified order
+    highlight_reel = combine_clips_into_reel(ordered_clips, CLIPS_FOLDER)
+    
+    # Get original video file for context
+    video_file = None
+    for filename in os.listdir(UPLOAD_FOLDER):
+        if filename.endswith(('.mp4', '.mov', '.avi')):
+            video_file = filename
+            break
+            
+    return render_template(
+        "index.html",
+        video_file=video_file,
+        audio_file="audio.wav",
+        clips=ordered_clips,
+        highlight_reel=highlight_reel
+    )
 
 
 if __name__ == "__main__":
