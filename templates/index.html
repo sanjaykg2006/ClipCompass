@@ -13,10 +13,83 @@
         input, select, button { margin-bottom: 20px; padding: 6px; }
         .clip-container { margin-bottom: 30px; padding: 10px; border: 1px solid #ccc; background: #fff; }
         .highlight-reel { border: 2px solid #4CAF50; padding: 15px; background: #eafbea; margin-top: 20px; }
+        .progress-container { margin: 20px 0; }
+        .progress-bar { 
+            width: 100%; 
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-fill { 
+            width: 0%; 
+            height: 100%; 
+            background-color: #4CAF50; 
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+        .progress-text { 
+            margin-top: 5px; 
+            font-weight: bold; 
+            color: #333; 
+            display: none;
+            text-align: center;
+        }
+        .customization { 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            border: 1px solid #ccc; 
+            background: #f9f9f9; 
+            border-radius: 5px;
+        }
+        .customization label {
+            display: block;
+            margin: 10px 0;
+        }
+        .customization input[type="text"],
+        .customization input[type="number"],
+        .customization input[type="color"],
+        .customization select {
+            margin-left: 10px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .customization select.font-select {
+            min-width: 150px;
+        }
+        .customization h4 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #combineProgress, #uploadProgress {
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
-    <h1>ClipCompass</h1>
+<h1>ClipCompass</h1>
 
     <!-- Upload Form -->
     <form id="uploadForm" method="POST" enctype="multipart/form-data" action="{{ url_for('upload_video') }}">
@@ -25,129 +98,298 @@
 
         <label for="modelSelect">Select Whisper Model:</label>
         <select name="model" id="modelSelect">
-            <option value="tiny">Tiny</option>
-            <option value="base" selected>Base</option>
-            <option value="small">Small</option>
-            <option value="medium">Medium</option>
-            <option value="large">Large</option>
+            <option value="tiny" {% if model=='tiny' %}selected{% endif %}>Tiny (fastest)</option>
+            <option value="base" {% if model=='base' or not model %}selected{% endif %}>Base</option>
+            <option value="small" {% if model=='small' %}selected{% endif %}>Small</option>
+            <option value="medium" {% if model=='medium' %}selected{% endif %}>Medium</option>
+            <option value="large" {% if model=='large' %}selected{% endif %}>Large (most accurate)</option>
         </select>
 
-        <button type="submit">Upload & Process</button>
+        <button type="submit" id="uploadButton">Upload & Process</button>
+        
+        <!-- Upload Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-bar" id="uploadProgress">
+                <div class="progress-fill" id="uploadProgressFill"></div>
+            </div>
+            <div class="progress-text" id="uploadStatus"></div>
+        </div>
     </form>
 
-    <!-- Video Preview -->
     <h3>Video Preview:</h3>
     <video id="videoPreview" controls></video>
 
-    {% if video_file %}
-    <h2>Processing Results</h2>
+    <div id="processingResults">
+    </div>
 
-    <h3>Original Video:</h3>
-    <video id="videoPlayer" controls>
-        <source src="{{ url_for('uploaded_file', filename=video_file) }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
+    <div id="processedContent" {% if not video_file %}style="display: none;"{% endif %}>
+        <h3>Processed Video:</h3>
+        <video id="videoPlayer" controls>
+            <source src="{{ url_for('static', filename='uploads/' + video_file) if video_file else '' }}" type="video/mp4">
+        </video>
+        
+        <audio id="audioPlayer" controls>
+            <source src="{{ url_for('static', filename='uploads/' + audio_file) if audio_file else '' }}" type="audio/wav">
+        </audio>
 
-    <h3>Extracted Audio:</h3>
-    <audio id="audioPlayer" controls>
-        <source src="{{ url_for('uploaded_file', filename=audio_file) }}" type="audio/wav">
-        Your browser does not support the audio element.
-    </audio>
+        {% if transcript %}
+            <h3>Transcript:</h3>
+            <div class="transcript">{{ transcript }}</div>
+        {% endif %}
 
-    <h3>Transcript:</h3>
-    <p>{{ transcript }}</p>
+        {% if segments %}
+            <h3>Segments:</h3>
+            <table>
+                <tr>
+                    <th>Time</th>
+                    <th>Text</th>
+                    <th>Action</th>
+                </tr>
+                {% for segment in segments %}
+                <tr>
+                    <td>{{ segment.start }}s - {{ segment.end }}s</td>
+                    <td>{{ segment.text }}</td>
+                    <td><a href="#" class="seek-link" data-start="{{ segment.start }}">Jump to</a></td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% endif %}
 
-    <h3>Transcript with Timestamps:</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Start (s)</th>
-                <th>End (s)</th>
-                <th>Text</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for seg in segments %}
-            <tr>
-                <td><a href="#" class="seek-link" data-start="{{ seg.start | float }}">{{ seg.start }}</a></td>
-                <td>{{ seg.end }}</td>
-                <td>{{ seg.text }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-
-    <h3>Highlight Clips Order:</h3>
-    {% if clips %}
-        <form id="clipOrderForm" method="POST" action="{{ url_for('combine_clips') }}">
-            <div id="clipList">
+        {% if clips %}
+            <h3>Generated Clips:</h3>
+            <form id="clipOrderForm" method="POST" action="{{ url_for('combine_clips_route') }}">
                 {% for clip in clips %}
                 <div class="clip-container">
-                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                        <input type="number" 
-                               name="clipOrder_{{ clip }}" 
-                               value="{{ loop.index }}" 
-                               min="1" 
-                               max="{{ clips|length }}"
-                               style="width: 60px; margin-right: 10px;">
-                        <span>{{ clip }}</span>
-                    </div>
-                    <video controls width="400">
-                        <source src="{{ url_for('serve_clip', filename=clip) }}" type="video/mp4">
+                    <video controls>
+                        <source src="{{ url_for('static', filename='clips/' + clip) }}" type="video/mp4">
                     </video>
-                    <a href="{{ url_for('serve_clip', filename=clip) }}" download>Download Clip</a>
+                    <label for="clipOrder_{{ clip }}">Order:</label>
+                    <input type="number" name="clipOrder_{{ clip }}" value="{{ loop.index }}" min="1" max="{{ clips|length }}">
                 </div>
                 {% endfor %}
+
+                <div class="customization">
+                    <h4>Customize Highlight Reel:</h4>
+                    <label>Intro Text: <input type="text" name="introText" value="{{ intro_text or 'ClipCompass Highlights' }}"></label><br>
+                    <label>Outro Text: <input type="text" name="outroText" value="{{ outro_text or 'Thanks for Watching!' }}"></label><br>
+                    <label>Intro Font: 
+                        <select name="introFont" class="font-select">
+                            <option value="arial" {% if intro_font=='arial' %}selected{% endif %}>Arial</option>
+                            <option value="times" {% if intro_font=='times' %}selected{% endif %}>Times New Roman</option>
+                            <option value="georgia" {% if intro_font=='georgia' %}selected{% endif %}>Georgia</option>
+                            <option value="verdana" {% if intro_font=='verdana' %}selected{% endif %}>Verdana</option>
+                            <option value="impact" {% if intro_font=='impact' %}selected{% endif %}>Impact</option>
+                            <option value="comic" {% if intro_font=='comic' %}selected{% endif %}>Comic Sans MS</option>
+                        </select>
+                    </label><br>
+                    <label>Outro Font: 
+                        <select name="outroFont" class="font-select">
+                            <option value="arial" {% if outro_font=='arial' %}selected{% endif %}>Arial</option>
+                            <option value="times" {% if outro_font=='times' %}selected{% endif %}>Times New Roman</option>
+                            <option value="georgia" {% if outro_font=='georgia' %}selected{% endif %}>Georgia</option>
+                            <option value="verdana" {% if outro_font=='verdana' %}selected{% endif %}>Verdana</option>
+                            <option value="impact" {% if outro_font=='impact' %}selected{% endif %}>Impact</option>
+                            <option value="comic" {% if outro_font=='comic' %}selected{% endif %}>Comic Sans MS</option>
+                        </select>
+                    </label><br>
+                    <label>Intro Color: <input type="color" name="introColor" value="{{ font_color_intro or '#ffffff' }}"></label><br>
+                    <label>Outro Color: <input type="color" name="outroColor" value="{{ font_color_outro or '#ffffff' }}"></label><br>
+                    <label>Intro Font Size: <input type="number" name="introFontSize" value="{{ font_size_intro or 48 }}" min="12" max="72"></label><br>
+                    <label>Outro Font Size: <input type="number" name="outroFontSize" value="{{ font_size_outro or 42 }}" min="12" max="72"></label><br>
+                    <label>Fade Duration: <input type="number" name="fadeDuration" value="{{ fade_duration or 0.5 }}" min="0.1" max="2.0" step="0.1"></label>
+                </div>
+
+                <button type="submit" id="combineButton">Combine Clips</button>
+                <div class="progress-container">
+                    <div class="progress-bar" id="combineProgress">
+                        <div class="progress-fill" id="combineProgressFill"></div>
+                    </div>
+                    <div class="progress-text" id="combineStatus"></div>
+                </div>
+            </form>
+        {% endif %}
+
+        {% if highlight_reel %}
+            <div class="highlight-reel">
+                <h3>Final Highlight Reel:</h3>
+                <video controls>
+                    <source src="{{ url_for('static', filename='clips/' + highlight_reel) }}" type="video/mp4">
+                </video>
             </div>
-            <button type="submit" style="margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
-                Combine Clips in Selected Order (with Intro & Outro)
-            </button>
-        </form>
-    {% else %}
-        <p>No highlight clips generated.</p>
-    {% endif %}
-
-    <h3>Combined Highlight Reel:</h3>
-    {% if highlight_reel %}
-    <div class="highlight-reel">
-        <video controls width="600">
-            <source src="{{ url_for('serve_clip', filename=highlight_reel) }}" type="video/mp4">
-        </video>
-        <br>
-        <a href="{{ url_for('serve_clip', filename=highlight_reel) }}" download>Download Highlight Reel</a>
+        {% endif %}
     </div>
-    {% else %}
-        <p>No combined highlight reel generated.</p>
-    {% endif %}
-
-    {% endif %}
 
     <script>
-        // Preview selected video before upload
-        const videoFileInput = document.getElementById('videoFile');
-        const videoPreview = document.getElementById('videoPreview');
-        videoFileInput.addEventListener('change', () => {
-            const file = videoFileInput.files[0];
+        // Progress bar functions
+        function showProgress(progressBar, statusElement) {
+            progressBar.style.display = 'block';
+            statusElement.style.display = 'block';
+        }
+
+        function updateProgress(progressFill, statusElement, percent, status) {
+            progressFill.style.width = `${percent}%`;
+            progressFill.textContent = `${Math.round(percent)}%`;
+            if (status) {
+                statusElement.textContent = status;
+            }
+        }
+
+        function hideProgress(progressBar, statusElement) {
+            progressBar.style.display = 'none';
+            statusElement.style.display = 'none';
+        }
+
+        // Preview uploaded video
+        document.getElementById("videoFile").addEventListener("change", function() {
+            const file = this.files[0];
             if (file) {
-                videoPreview.src = URL.createObjectURL(file);
+                const preview = document.getElementById("videoPreview");
+                preview.src = URL.createObjectURL(file);
             }
         });
 
-        // Seek to timestamp for processed video/audio
-        document.querySelectorAll('.seek-link').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const seconds = parseFloat(link.dataset.start);
-                const video = document.getElementById("videoPlayer");
-                const audio = document.getElementById("audioPlayer");
-                if (!isNaN(seconds)) {
-                    video.currentTime = seconds;
-                    audio.currentTime = seconds;
-                    video.play();
-                    audio.play();
+        // Handle upload form submission
+        const uploadForm = document.getElementById("uploadForm");
+        const uploadButton = document.getElementById("uploadButton");
+        const uploadProgress = document.getElementById("uploadProgress");
+        const uploadProgressFill = document.getElementById("uploadProgressFill");
+        const uploadStatus = document.getElementById("uploadStatus");
+
+        uploadForm.addEventListener("submit", function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            // Show progress bar and disable button
+            showProgress(uploadProgress, uploadStatus);
+            uploadButton.disabled = true;
+            updateProgress(uploadProgressFill, uploadStatus, 0, "Starting upload...");
+
+            // Simulate upload progress (since we don't have real progress events)
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 5;
+                if (progress <= 90) {
+                    updateProgress(uploadProgressFill, uploadStatus, progress, "Processing video...");
                 }
+            }, 500);
+
+            fetch(this.action, {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.text())
+            .then(html => {
+                clearInterval(interval);
+                updateProgress(uploadProgressFill, uploadStatus, 100, "Complete!");
+                
+                // Create a temporary div to parse the response
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                
+                // Get the content we want to update
+                const processedContent = document.getElementById('processedContent');
+                const newProcessedContent = tempDiv.querySelector('#processedContent');
+                
+                if (newProcessedContent) {
+                    processedContent.innerHTML = newProcessedContent.innerHTML;
+                    processedContent.style.display = 'block';
+                }
+                
+                bindSeekLinks();
+                setTimeout(() => {
+                    hideProgress(uploadProgress, uploadStatus);
+                    uploadButton.disabled = false;
+                }, 1000);
+            })
+            .catch(error => {
+                clearInterval(interval);
+                updateProgress(uploadProgressFill, uploadStatus, 0, "Error: " + error);
+                uploadButton.disabled = false;
             });
         });
+
+        // Function to bind seek links
+        function bindSeekLinks() {
+            document.querySelectorAll(".seek-link").forEach(link => {
+                link.addEventListener("click", e => {
+                    e.preventDefault();
+                    const seconds = parseFloat(link.dataset.start);
+                    const video = document.getElementById("videoPlayer");
+                    const audio = document.getElementById("audioPlayer");
+                    if (!isNaN(seconds) && video && audio) {
+                        video.currentTime = seconds;
+                        audio.currentTime = seconds;
+                        video.play();
+                        audio.play();
+                    }
+                });
+            });
+        }
+
+        // Initial bind of seek links
+        bindSeekLinks();
+
+        // Bind combine clips form via AJAX
+        const combineForm = document.getElementById("clipOrderForm");
+        if (combineForm) {
+            const combineButton = document.getElementById("combineButton");
+            const combineProgress = document.getElementById("combineProgress");
+            const combineProgressFill = document.getElementById("combineProgressFill");
+            const combineStatus = document.getElementById("combineStatus");
+
+            combineForm.addEventListener("submit", e => {
+                e.preventDefault();
+                const combineData = new FormData(combineForm);
+
+                // Show progress bar and disable button
+                showProgress(combineProgress, combineStatus);
+                combineButton.disabled = true;
+                updateProgress(combineProgressFill, combineStatus, 0, "Starting to combine clips...");
+
+                // Simulate progress for clip combination
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 4;
+                    if (progress <= 90) {
+                        updateProgress(combineProgressFill, combineStatus, progress, "Combining clips...");
+                    }
+                }, 500);
+
+                fetch("{{ url_for('combine_clips_route') }}", {
+                    method: "POST",
+                    body: combineData
+                })
+                .then(res => res.text())
+                .then(html2 => {
+                    clearInterval(interval);
+                    updateProgress(combineProgressFill, combineStatus, 100, "Complete!");
+                    
+                    // Create a temporary div to parse the response
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html2;
+                    
+                    // Get the content we want to update
+                    const processedContent = document.getElementById('processedContent');
+                    const newProcessedContent = tempDiv.querySelector('#processedContent');
+                    
+                    if (newProcessedContent) {
+                        processedContent.innerHTML = newProcessedContent.innerHTML;
+                        processedContent.style.display = 'block';
+                    }
+                    
+                    bindSeekLinks();
+                    setTimeout(() => {
+                        hideProgress(combineProgress, combineStatus);
+                        combineButton.disabled = false;
+                    }, 1000);
+                })
+                .catch(error => {
+                    clearInterval(interval);
+                    updateProgress(combineProgressFill, combineStatus, 0, "Error: " + error);
+                    combineButton.disabled = false;
+                });
+            });
+        }
     </script>
 </body>
 </html>
